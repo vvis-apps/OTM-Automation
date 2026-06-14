@@ -1,19 +1,9 @@
 'use strict';
 const { exec }  = require('child_process');
 const path      = require('path');
-const fs        = require('fs');
 const { createRun, updateRun, getTestsByRunId } = require('../db');
 
 const ROOT = path.join(__dirname, '..', '..');
-
-function loadRegions() {
-  try {
-    const f = path.join(ROOT, 'regions.json');
-    if (fs.existsSync(f)) return JSON.parse(fs.readFileSync(f, 'utf8'));
-    if (process.env.REGIONS_JSON) return JSON.parse(process.env.REGIONS_JSON);
-  } catch (_) {}
-  return {};
-}
 
 // ── Shared live state ─────────────────────────────────────────────────────
 const live = {
@@ -33,6 +23,38 @@ function broadcastEvent(eventName, data) {
 function json(res, data, status) {
   res.writeHead(status || 200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(data));
+}
+
+// ── Run a single playwright command, streaming steps ─────────────────────
+function runCmd(cmd, env, stepOffset) {
+  return new Promise((resolve, reject) => {
+    const child = exec(cmd, { cwd: ROOT, maxBuffer: 20 * 1024 * 1024, env });
+
+    child.on('error', reject);
+
+    let stdoutBuf = '';
+    child.stdout.on('data', chunk => {
+      stdoutBuf += chunk.toString();
+      const lines = stdoutBuf.split('\n');
+      stdoutBuf = lines.pop();
+      lines.forEach(line => {
+        if (!line.trim()) return;
+        try {
+          const obj = JSON.parse(line);
+          if (obj.type === 'step') {
+            const stepped = { ...obj, step: obj.step + stepOffset };
+            const idx = live.steps.findIndex(s => s.step === stepped.step);
+            if (idx >= 0) live.steps[idx] = stepped;
+            else live.steps.push(stepped);
+            broadcastEvent('step', stepped);
+          }
+        } catch (_) {}
+      });
+    });
+
+    child.stderr.on('data', () => {});
+    child.on('close', code => resolve(code));
+  });
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────
@@ -71,71 +93,32 @@ function handleTrigger(req, res, upath) {
       let payload = {};
       try { payload = JSON.parse(body); } catch (_) {}
 
-      const suite      = payload.suite      || 'login';
-      const regionKey  = payload.region     || 'north-america';
-      const testCase   = payload.testCase   || '';
+      const suite    = payload.suite    || 'all';
+      const testCase = payload.testCase || '';
 
-      // Load region credentials
-      const regions     = loadRegions();
-      const regionCfg   = regions[regionKey] || {};
-      const regionLabel = regionCfg.label || regionKey;
-
-      const runId    = createRun('manual', 'test', regionKey, regionLabel);
+      // Credentials come from .env — no regions.json needed
+      // Derive a human-readable run name from the suite/testCase
+      const runName = suite === 'all' ? 'OTM Full Suite'
+        : testCase.toLowerCase().includes('login') ? 'Login'
+        : testCase.toLowerCase().includes('poland') || testCase.toLowerCase().includes('e2e') ? 'Poland OTM E2E'
+        : testCase || 'Manual Run';
+      const runId    = createRun('manual', runName, 'poland', 'Europe - Poland');
       const runStart = Date.now();
       live.status    = 'running';
       live.runId     = runId;
       live.steps     = [];
 
-      broadcastEvent('start', { runId, status: 'running', region: regionKey, regionLabel });
+      broadcastEvent('start', { runId, status: 'running', region: 'poland', regionLabel: 'Europe - Poland' });
 
-      const cmd = suite === 'all'
-        ? 'npm run test:all && npm run report'
-        : 'npm run test:login && npm run report';
+      const baseEnv = {
+        ...process.env,
+        OTM_RUN_ID:    String(runId),
+        OTM_TEST_CASE: testCase,
+        HEADLESS:      '1',
+      };
 
-      const child = exec(cmd, {
-        cwd:       ROOT,
-        maxBuffer: 20 * 1024 * 1024,
-        env: {
-          ...process.env,
-          OTM_RUN_ID:       String(runId),
-          OTM_USERNAME:     regionCfg.username || '',
-          OTM_PASSWORD:     regionCfg.password || '',
-          OTM_DOMAIN:       regionCfg.domain   || '',
-          OTM_REGION:       regionKey,
-          OTM_REGION_LABEL: regionLabel,
-          OTM_TEST_CASE:    testCase,
-        },
-      });
-
-      child.on('error', err => {
-        broadcastEvent('error', { message: err.message });
-      });
-
-      let stdoutBuf = '';
-      child.stdout.on('data', chunk => {
-        stdoutBuf += chunk.toString();
-        const lines = stdoutBuf.split('\n');
-        stdoutBuf = lines.pop(); // hold incomplete tail
-        lines.forEach(line => {
-          if (!line.trim()) return;
-          try {
-            const obj = JSON.parse(line);
-            if (obj.type === 'step') {
-              const idx = live.steps.findIndex(s => s.step === obj.step);
-              if (idx >= 0) live.steps[idx] = obj;
-              else live.steps.push(obj);
-              broadcastEvent('step', obj);
-              return;
-            }
-          } catch (_) {}
-          // Non-JSON lines silently ignored
-        });
-      });
-
-      child.stderr.on('data', () => {});
-
-      child.on('close', code => {
-        const status     = code === 0 ? 'passed' : 'failed';
+      const finish = (exitCode) => {
+        const status     = exitCode === 0 ? 'passed' : 'failed';
         const durationMs = Date.now() - runStart;
         live.status      = 'idle';
 
@@ -148,12 +131,32 @@ function handleTrigger(req, res, upath) {
           finished_at: new Date().toISOString(),
           duration_ms: durationMs,
           total_tests: tests.length || 1,
-          passed:      tests.length ? passed : (code === 0 ? 1 : 0),
-          failed:      tests.length ? failed : (code === 0 ? 0 : 1),
+          passed:      tests.length ? passed : (exitCode === 0 ? 1 : 0),
+          failed:      tests.length ? failed : (exitCode === 0 ? 0 : 1),
         });
 
         broadcastEvent('done', { status, runId, durationMs });
-      });
+      };
+
+      const generateReport = () => runCmd('npm run report', baseEnv, 0).catch(() => {});
+
+      if (suite === 'all') {
+        runCmd('npm run test:login', { ...baseEnv, OTM_TEST_CASE: 'login' }, 0)
+          .then(loginCode => {
+            const divider = { type: 'step', step: 11, total: 11, name: '── Poland OTM E2E Starting ──', status: 'pass', duration_ms: 0 };
+            live.steps.push(divider);
+            broadcastEvent('step', divider);
+            return runCmd('npm run test:poland', { ...baseEnv, OTM_TEST_CASE: 'poland-e2e' }, 100)
+              .then(polandCode => generateReport().then(() => finish(loginCode === 0 && polandCode === 0 ? 0 : 1)));
+          })
+          .catch(err => { broadcastEvent('error', { message: err.message }); finish(1); });
+      } else {
+        const tcLower = testCase.toLowerCase();
+        const cmd = tcLower.includes('login') ? 'npm run test:login' : 'npm run test:poland';
+        runCmd(cmd, baseEnv, 0)
+          .then(code => generateReport().then(() => finish(code)))
+          .catch(err => { broadcastEvent('error', { message: err.message }); finish(1); });
+      }
 
       json(res, { runId, status: 'started' });
     });

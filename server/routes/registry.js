@@ -116,6 +116,18 @@ function handleRegistry(req, res, upath) {
     return true;
   }
 
+  // GET /api/registry/cases/:id/latest-steps
+  const latestStepsM = upath.match(/^\/api\/registry\/cases\/(\d+)\/latest-steps$/);
+  if (method === 'GET' && latestStepsM) {
+    const tc = db.getTestCaseById(parseInt(latestStepsM[1]));
+    if (!tc) { json(res, [], 404); return true; }
+    // Find the latest test_result matching this test case name
+    const raw   = db.getLatestStepsForTestName(tc.name);
+    const steps = tryParse(raw, []);
+    json(res, steps);
+    return true;
+  }
+
   // PUT /api/registry/cases/:id
   if (method === 'PUT' && caseIdM) {
     readBody(req).then(body => {

@@ -1,5 +1,5 @@
 'use strict';
-const { getRuns, getRunById, getTestsByRunId, getPassRateTrend } = require('../db');
+const { getRuns, getRunById, getTestsByRunId, getPassRateTrend, getFlakySteps, getPhaseTimingFromLastRun } = require('../db');
 
 function json(res, data, status) {
   res.writeHead(status || 200, { 'Content-Type': 'application/json' });
@@ -10,12 +10,24 @@ function handleRuns(req, res, upath) {
   if (req.method !== 'GET') return false;
 
   if (upath === '/api/runs') {
-    json(res, getRuns(50));
+    const qs    = new URL(req.url, 'http://localhost').searchParams;
+    const limit = parseInt(qs.get('limit') || '50', 10);
+    json(res, getRuns(isNaN(limit) ? 50 : limit));
     return true;
   }
 
-  if (upath === '/api/trend') {
+  if (upath === '/api/trend' || upath === '/api/pass-rate-trend') {
     json(res, getPassRateTrend());
+    return true;
+  }
+
+  if (upath === '/api/flaky-steps') {
+    json(res, getFlakySteps());
+    return true;
+  }
+
+  if (upath === '/api/phase-timing') {
+    json(res, getPhaseTimingFromLastRun());
     return true;
   }
 

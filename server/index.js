@@ -12,12 +12,6 @@ const handleRegistry = require('./routes/registry');
 
 const PORT        = process.env.PORT || 3000;
 
-function loadRegions() {
-  const filePath = path.join(__dirname, '..', 'regions.json');
-  if (fs.existsSync(filePath)) return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-  if (process.env.REGIONS_JSON) return JSON.parse(process.env.REGIONS_JSON);
-  throw new Error('regions.json not found and REGIONS_JSON env var not set');
-}
 const CLIENT_DIST = path.join(__dirname, '..', 'client', 'dist');
 const ALLURE_DIR  = path.join(__dirname, '..', 'allure-report');
 
@@ -60,22 +54,6 @@ const server = http.createServer((req, res) => {
   // ── API routes ─────────────────────────────────────────────────────────
   if (upath.startsWith('/api/')) {
 
-    // GET /api/regions — return region list with passwords masked
-    if (req.method === 'GET' && upath === '/api/regions') {
-      try {
-        const regions = loadRegions();
-        const masked  = Object.entries(regions).reduce((acc, [key, val]) => {
-          acc[key] = { ...val, password: '****' };
-          return acc;
-        }, {});
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(masked));
-      } catch (e) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Could not load regions.json: ' + e.message }));
-      }
-      return;
-    }
 
     if (handleRegistry(req, res, upath)) return;
     if (handleRuns(req, res, upath))     return;
@@ -95,6 +73,17 @@ const server = http.createServer((req, res) => {
       res.end('<h2 style="font-family:sans-serif;padding:40px;color:#64748b">No Allure report found.<br>Run tests first, then click the report link again.</h2>');
     }
     return;
+  }
+
+  // ── Screenshots & videos from test-results/ ───────────────────────────
+  if (upath.startsWith('/test-results/') || upath.startsWith('/screenshots/')) {
+    const rel      = upath.replace(/^\/(test-results|screenshots)\//, '');
+    const base     = path.basename(rel);
+    const TR       = path.join(__dirname, '..', 'test-results');
+    // Try: exact path, screenshots subfolder, flat root
+    if (serveFile(res, path.join(TR, rel)))                    return;
+    if (serveFile(res, path.join(TR, 'screenshots', base)))    return;
+    if (serveFile(res, path.join(TR, base)))                   return;
   }
 
   // ── React SPA (client/dist) ────────────────────────────────────────────

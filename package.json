@@ -9,7 +9,8 @@
     "postinstall": "node -e \"if(!process.env.SKIP_BUILD)require('child_process').execSync('npm run build',{stdio:'inherit'})\"",
     "test:login": "npx playwright test tests/login.spec.ts",
     "test:all": "npx playwright test",
-    "report": "npx allure generate allure-results --clean -o allure-report"
+    "report": "npx allure generate allure-results --clean -o allure-report",
+    "test:poland": "npx playwright test tests/poland-e2e.spec.ts"
   },
   "dependencies": {
     "better-sqlite3": "latest",
@@ -20,7 +21,8 @@
     "@types/better-sqlite3": "latest",
     "@types/node": "latest",
     "allure-commandline": "latest",
-    "allure-playwright": "latest",
+    "allure-js-commons": "^3.0.3",
+    "allure-playwright": "^3.0.3",
     "typescript": "latest"
   }
 }

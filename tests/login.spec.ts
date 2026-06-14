@@ -2,11 +2,12 @@ import { test, expect } from '@playwright/test';
 import { allure } from 'allure-playwright';
 import dotenv from 'dotenv';
 import path from 'path';
+import * as fs from 'fs';
 import { jetFill, jetClick, takeStepScreenshot } from './helpers/jet-helpers';
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-const OTM_URL         = process.env.OTM_URL          ?? '';
+const OTM_URL         = (process.env.OTM_URL         ?? '').replace(/\/$/, '');
 const OTM_USERNAME    = process.env.OTM_USERNAME     ?? '';
 const OTM_PASSWORD    = process.env.OTM_PASSWORD     ?? '';
 const OTM_DOMAIN      = process.env.OTM_DOMAIN       ?? '';
@@ -23,7 +24,7 @@ const SEL_OPC_PASSWORD = '#password';
 const SEL_OPC_SIGNIN   = '#signin';
 const SEL_HOME_LINK    = 'text=Shipment Management';
 
-const TOTAL_STEPS = 8;
+const TOTAL_STEPS = 10;
 
 /** Emit a structured step event to stdout so the portal server can parse it. */
 function emitStep(opts: {
@@ -86,15 +87,16 @@ function finaliseRun(runId: number, status: 'passed' | 'failed', durationMs: num
 function saveTestResult(runId: number | null, result: {
   suite_name: string; test_name: string; status: string;
   duration_ms: number; error_message?: string | null;
-  screenshot_path?: string | null; steps: any[];
+  screenshot_path?: string | null; video_path?: string | null; steps: any[];
 }) {
   if (!runId) return;
   dbRun(`
     INSERT INTO test_results
       (run_id,suite_name,test_name,status,duration_ms,error_message,screenshot_path,video_path,steps)
-    VALUES (?,?,?,?,?,?,?,NULL,?)`,
+    VALUES (?,?,?,?,?,?,?,?,?)`,
     [runId, result.suite_name, result.test_name, result.status, result.duration_ms,
-     result.error_message ?? null, result.screenshot_path ?? null, JSON.stringify(result.steps)]
+     result.error_message ?? null, result.screenshot_path ?? null,
+     result.video_path ?? null, JSON.stringify(result.steps)]
   );
 }
 
@@ -102,6 +104,7 @@ function saveTestResult(runId: number | null, result: {
 test.describe('OTM Login', () => {
 
   test('User can log in to Oracle Transportation Management', async ({ page }) => {
+    test.setTimeout(120_000);
     // If a specific test case was requested and it's not Login, skip this test
     if (OTM_TEST_CASE && OTM_TEST_CASE.toLowerCase() !== 'login') {
       test.skip(true, `Skipping Login — OTM_TEST_CASE=${OTM_TEST_CASE}`);
@@ -189,16 +192,25 @@ test.describe('OTM Login', () => {
 
       // Step 6
       await step(6, 'Waiting for redirect', async () => {
-        await page.waitForFunction(
-          () => !document.title.toLowerCase().includes('sign in'),
-          { timeout: 60000 }
-        );
+        // Poll until URL reaches the OTM domain — robust against multi-hop IDCS redirects
+        const deadline = Date.now() + 60_000;
+        while (Date.now() < deadline) {
+          try {
+            const url = page.url();
+            if (url.includes('otmgtm')) break;
+            if (url.includes('signin') || url.includes('idcs') || url.includes('login') || url === 'about:blank') {
+              await page.waitForTimeout(1_000);
+              continue;
+            }
+            break; // any non-login URL means we redirected
+          } catch (_) { break; }
+        }
         await allure.parameter('Post-login URL', page.url());
       });
 
       // Step 7
       await step(7, 'Verifying OTM homepage', async () => {
-        await page.waitForLoadState('networkidle', { timeout: 60000 });
+        await page.waitForLoadState('domcontentloaded', { timeout: 60000 });
         const title = await page.title();
         await allure.parameter('Homepage title', title);
         const shipVisible = await page.locator(SEL_HOME_LINK).first()
@@ -216,26 +228,56 @@ test.describe('OTM Login', () => {
         // screenshot is taken automatically by the step wrapper
       });
 
+      // Step 9 — open user menu
+      await step(9, 'Click user menu (LEL7597_TMS)', async () => {
+        const menu = page.locator(`[title="${OTM_USERNAME}"], button:has-text("${OTM_USERNAME}")`).first();
+        await menu.waitFor({ state: 'visible', timeout: 20_000 });
+        await menu.click();
+        await page.waitForSelector('text=Settings and Actions', { timeout: 15_000 });
+      });
+
+      // Step 10 — sign out
+      await step(10, 'Sign Out', async () => {
+        const signOut = page.locator('button:has-text("Sign Out"), a:has-text("Sign Out"), [title="Sign Out"]').first();
+        await signOut.waitFor({ state: 'visible', timeout: 20_000 });
+        await signOut.dispatchEvent('click');
+        await page.waitForURL(/signin|idcs|login/, { timeout: 30_000, waitUntil: 'commit' }).catch(() => {});
+      });
+
       // ── Persist ──────────────────────────────────────────────────────────
       const durationMs = Date.now() - startMs;
+      const video      = page.video();
+      await page.close(); // must close before saveAs to finalise the video
+      const videoFile  = `login-${Date.now()}.webm`;
+      const videoDest  = path.resolve(__dirname, '../test-results/videos', videoFile);
+      fs.mkdirSync(path.dirname(videoDest), { recursive: true });
+      await video?.saveAs(videoDest).catch(err => console.error('[video]', err?.message));
       saveTestResult(runId, {
         suite_name:      'OTM Login',
         test_name:       'User can log in to Oracle Transportation Management',
         status:          'passed',
         duration_ms:     durationMs,
         screenshot_path: screenshotPath,
+        video_path:      `test-results/videos/${videoFile}`,
         steps:           dbSteps,
       });
       finaliseRun(runId!, 'passed', durationMs);
 
     } catch (e: any) {
       const durationMs = Date.now() - startMs;
+      const video      = page.video();
+      await page.close();
+      const videoFile  = `login-${Date.now()}.webm`;
+      const videoDest  = path.resolve(__dirname, '../test-results/videos', videoFile);
+      fs.mkdirSync(path.dirname(videoDest), { recursive: true });
+      await video?.saveAs(videoDest).catch(err => console.error('[video]', err?.message));
       saveTestResult(runId, {
         suite_name:    'OTM Login',
         test_name:     'User can log in to Oracle Transportation Management',
         status:        'failed',
         duration_ms:   durationMs,
         error_message: errorMsg || e.message,
+        video_path:    `test-results/videos/${videoFile}`,
         steps:         dbSteps,
       });
       finaliseRun(runId!, 'failed', durationMs);

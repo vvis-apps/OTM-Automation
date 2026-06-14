@@ -1,28 +1,47 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 
-const INITIAL_STEPS = [
-  { step: 1, name: 'Navigating to OTM',          status: 'pending' },
-  { step: 2, name: 'Login page loaded',           status: 'pending' },
-  { step: 3, name: 'Entering username',           status: 'pending' },
-  { step: 4, name: 'Entering password',           status: 'pending' },
-  { step: 5, name: 'Clicking Sign In',            status: 'pending' },
-  { step: 6, name: 'Waiting for redirect',        status: 'pending' },
-  { step: 7, name: 'Verifying OTM homepage',      status: 'pending' },
-  { step: 8, name: 'Capturing homepage screenshot', status: 'pending' },
-];
-
 function mergeStep(steps, incoming) {
-  return steps.map(s =>
-    s.step === incoming.step ? { ...s, ...incoming } : s
-  );
+  const idx = steps.findIndex(s => s.step === incoming.step);
+  if (idx >= 0) {
+    const next = [...steps];
+    next[idx] = { ...next[idx], ...incoming };
+    return next;
+  }
+  const next = [...steps, incoming];
+  next.sort((a, b) => a.step - b.step);
+  return next;
 }
 
 export default function useLiveStatus() {
-  const [runStatus, setRunStatus] = useState('idle');   // idle | running | passed | failed
-  const [steps,     setSteps]     = useState(INITIAL_STEPS);
-  const [runId,     setRunId]     = useState(null);
+  const [runStatus,  setRunStatus]  = useState('idle');
+  const [steps,      setSteps]      = useState([]);
+  const [runId,      setRunId]      = useState(null);
   const [durationMs, setDurationMs] = useState(null);
-  const esRef = useRef(null);
+  const esRef      = useRef(null);
+  // Buffer incoming step events and flush in one batch every 80ms
+  // This prevents rapid "running→pass" pairs from causing two renders per step
+  const bufferRef  = useRef([]);
+  const timerRef   = useRef(null);
+
+  const flushBuffer = useCallback(() => {
+    timerRef.current = null;
+    const batch = bufferRef.current.splice(0);
+    if (!batch.length) return;
+    setSteps(prev => {
+      let next = prev;
+      for (const incoming of batch) {
+        next = mergeStep(next, incoming);
+      }
+      return next;
+    });
+  }, []);
+
+  const queueStep = useCallback((d) => {
+    bufferRef.current.push(d);
+    if (!timerRef.current) {
+      timerRef.current = setTimeout(flushBuffer, 80);
+    }
+  }, [flushBuffer]);
 
   const connect = useCallback(() => {
     if (esRef.current) esRef.current.close();
@@ -30,49 +49,44 @@ export default function useLiveStatus() {
     const es = new EventSource('/api/live');
     esRef.current = es;
 
-    // Reconnect snapshot
     es.addEventListener('init', e => {
       try {
         const d = JSON.parse(e.data);
         setRunStatus(d.status || 'idle');
         setRunId(d.runId || null);
-        if (d.steps && d.steps.length > 0) {
-          setSteps(INITIAL_STEPS.map(s => {
-            const found = d.steps.find(x => x.step === s.step);
-            return found ? { ...s, ...found } : s;
-          }));
-        } else {
-          setSteps(INITIAL_STEPS);
-        }
+        const sorted = [...(d.steps || [])].sort((a, b) => a.step - b.step);
+        setSteps(sorted);
       } catch (_) {}
     });
 
-    // Run started — reset steps
     es.addEventListener('start', e => {
       try {
         const d = JSON.parse(e.data);
+        bufferRef.current = [];
+        if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
         setRunStatus('running');
         setRunId(d.runId);
-        setSteps(INITIAL_STEPS);
+        setSteps([]);
         setDurationMs(null);
       } catch (_) {}
     });
 
-    // Individual step update
     es.addEventListener('step', e => {
-      try {
-        const d = JSON.parse(e.data);
-        setSteps(prev => mergeStep(prev, d));
-      } catch (_) {}
+      try { queueStep(JSON.parse(e.data)); } catch (_) {}
     });
 
-    // Run finished
     es.addEventListener('done', e => {
       try {
         const d = JSON.parse(e.data);
-        setRunStatus(d.status);   // 'passed' | 'failed'
+        // Flush any buffered steps immediately before marking done
+        if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+        flushBuffer();
+        setRunStatus(d.status);
         setRunId(d.runId);
         setDurationMs(d.durationMs || null);
+        setSteps(prev => prev.map(s =>
+          s.status === 'running' ? { ...s, status: 'fail', error: 'Step did not complete (process exited)' } : s
+        ));
       } catch (_) {}
     });
 
@@ -80,11 +94,14 @@ export default function useLiveStatus() {
       es.close();
       setTimeout(connect, 3000);
     };
-  }, []);
+  }, [queueStep, flushBuffer]);
 
   useEffect(() => {
     connect();
-    return () => { if (esRef.current) esRef.current.close(); };
+    return () => {
+      if (esRef.current) esRef.current.close();
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [connect]);
 
   return { runStatus, steps, runId, durationMs };

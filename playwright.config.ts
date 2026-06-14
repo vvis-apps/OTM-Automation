@@ -23,10 +23,10 @@ export default defineConfig({
 
   use: {
     baseURL: process.env.OTM_URL,
-    headless: process.env.RENDER ? true : false,
+    headless: !!(process.env.RENDER || process.env.HEADLESS),
     viewport: { width: 1440, height: 900 },
     screenshot: 'on',
-    video: 'retain-on-failure',
+    video: 'on',
     trace: 'on',
     actionTimeout: 30000,
     navigationTimeout: 60000,
@@ -36,7 +36,7 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: { ...devices['Desktop Chrome'], channel: 'msedge' },
     },
   ],
 });

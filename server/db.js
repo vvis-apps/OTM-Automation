@@ -103,134 +103,46 @@ function seedRegistry(d) {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
-  const REGIONS = ['north-america', 'poland', 'turkey', 'germany', 'brazil'];
+  const suite = insertSuite.run('poland', 'OTM Automation', 'Oracle Transportation Management automated test cases').lastInsertRowid;
 
-  // ── Sanity suite (all regions) ──────────────────────────────────────────
-  const sanityCases = [
-    {
-      name: 'Login',
-      description: 'Verify successful login to OTM with valid credentials',
-      preconditions: 'Valid user credentials exist. OTM instance is accessible.',
-      steps: JSON.stringify([
-        'Navigate to the OTM URL',
-        'Wait for Oracle IDCS sign-in page to load',
-        'Enter username in the username field',
-        'Enter password in the password field',
-        'Click the Sign In button',
-        'Wait for OTM homepage to load',
-        'Verify Shipment Management link is visible'
-      ]),
-      expected_result: 'User is successfully logged in and OTM homepage is displayed with all navigation links visible.',
-      priority: 'high',
-    },
-    {
-      name: 'AddProperties',
-      description: 'Verify that system properties can be added and saved',
-      preconditions: 'User is logged in. Admin access is available.',
-      steps: JSON.stringify([
-        'Navigate to Admin > System Properties',
-        'Click Add Property button',
-        'Enter property name and value',
-        'Click Save',
-        'Verify property appears in the list'
-      ]),
-      expected_result: 'Property is saved and appears in the system properties list.',
-      priority: 'medium',
-    },
-    {
-      name: 'CreateDomain',
-      description: 'Verify that a new domain can be created in OTM',
-      preconditions: 'User is logged in with admin privileges.',
-      steps: JSON.stringify([
-        'Navigate to Admin > Domains',
-        'Click Create Domain button',
-        'Enter Domain ID and description',
-        'Configure domain settings',
-        'Click Save',
-        'Verify domain appears in the domain list'
-      ]),
-      expected_result: 'Domain is created successfully and is visible in the domain management list.',
-      priority: 'high',
-    },
-    {
-      name: 'CreateUser',
-      description: 'Verify that a new user can be created with appropriate roles',
-      preconditions: 'User is logged in with admin privileges. Target domain exists.',
-      steps: JSON.stringify([
-        'Navigate to Admin > User Management',
-        'Click Create User button',
-        'Enter username, email and display name',
-        'Assign user to domain',
-        'Assign required roles',
-        'Set password',
-        'Click Save',
-        'Verify user appears in user list'
-      ]),
-      expected_result: 'User is created successfully and can log in with the assigned credentials.',
-      priority: 'high',
-    },
-  ];
+  insertCase.run(suite, 'poland',
+    'Login',
+    'Verify successful login to OTM with valid credentials',
+    'Valid user credentials exist. OTM instance is accessible.',
+    JSON.stringify([
+      'Navigate to the OTM URL',
+      'Wait for Oracle IDCS sign-in page to load',
+      'Enter username in the username field',
+      'Enter password in the password field',
+      'Click the Sign In button',
+      'Wait for OTM homepage to load',
+      'Verify OTM homepage is displayed',
+      'Capture homepage screenshot',
+    ]),
+    'User is successfully logged in and OTM homepage is displayed.',
+    'high'
+  );
 
-  REGIONS.forEach(region => {
-    const sid = insertSuite.run(region, 'Sanity', 'Core sanity checks applicable to all regions').lastInsertRowid;
-    sanityCases.forEach(c => insertCase.run(sid, region, c.name, c.description, c.preconditions, c.steps, c.expected_result, c.priority));
-  });
-
-  // ── North America ────────────────────────────────────────────────────────
-  const naOM = insertSuite.run('north-america', 'Order Management', 'End-to-end order lifecycle tests for North America').lastInsertRowid;
-  [
-    { name: 'Create Order', desc: 'Verify a new freight order can be created', pre: 'User logged in. Active shipper/consignee locations exist.', steps: ['Navigate to Order Management', 'Click New Order', 'Enter order details (source, destination, commodity)', 'Set pickup and delivery dates', 'Assign carrier', 'Click Submit', 'Note the order reference number'], exp: 'Order is created with status New and reference number is generated.', pri: 'high' },
-    { name: 'Update Order', desc: 'Verify order details can be modified before tendering', pre: 'An order exists in New or Planning status.', steps: ['Search for the order by reference number', 'Open order details', 'Click Edit', 'Modify delivery date or commodity weight', 'Click Save'], exp: 'Changes are saved and order audit log reflects the update.', pri: 'medium' },
-    { name: 'Cancel Order', desc: 'Verify an order can be cancelled with a reason', pre: 'An order exists in New status.', steps: ['Open the order', 'Click Cancel Order', 'Select cancellation reason', 'Enter remarks', 'Click Confirm'], exp: 'Order status changes to Cancelled and is removed from active planning.', pri: 'medium' },
-    { name: 'Search Orders', desc: 'Verify order search by multiple criteria', pre: 'Multiple orders exist in various statuses.', steps: ['Navigate to Order Management > Search', 'Enter shipper name or date range', 'Click Search', 'Verify results list appears', 'Apply status filter'], exp: 'Search returns relevant orders matching the criteria.', pri: 'low' },
-  ].forEach(c => insertCase.run(naOM, 'north-america', c.name, c.desc, c.pre, JSON.stringify(c.steps.map ? c.steps : [c.steps]), c.exp, c.pri));
-
-  const naSM = insertSuite.run('north-america', 'Shipment Management', 'Shipment creation and tracking for North America').lastInsertRowid;
-  [
-    { name: 'Create Shipment', desc: 'Verify a shipment can be created from an order', pre: 'Tendered order exists. Carrier is assigned.', steps: ['Navigate to Shipment Management', 'Click Build Shipment', 'Select source order(s)', 'Assign carrier and equipment type', 'Set departure and arrival times', 'Click Save Shipment'], exp: 'Shipment is created and linked to the source order with a shipment reference.', pri: 'high' },
-    { name: 'Update Shipment', desc: 'Verify shipment stops and timing can be updated', pre: 'Shipment in Planning status exists.', steps: ['Open shipment by reference', 'Click Edit Stops', 'Modify arrival time at a stop', 'Click Save'], exp: 'Shipment stop times updated and reflected in tracking.', pri: 'medium' },
-    { name: 'Track Shipment', desc: 'Verify shipment status and location tracking', pre: 'Active shipment with in-transit status.', steps: ['Open shipment details', 'Click Tracking tab', 'Verify current location and status events', 'Check ETA calculation'], exp: 'Tracking shows correct status history and estimated arrival.', pri: 'medium' },
-    { name: 'Cancel Shipment', desc: 'Verify a planned shipment can be cancelled', pre: 'Shipment in Planning status.', steps: ['Open shipment', 'Click Cancel Shipment', 'Enter cancellation reason', 'Confirm cancellation'], exp: 'Shipment cancelled and linked orders return to tendered status.', pri: 'low' },
-  ].forEach(c => insertCase.run(naSM, 'north-america', c.name, c.desc, c.pre, JSON.stringify(c.steps), c.exp, c.pri));
-
-  // ── Poland ────────────────────────────────────────────────────────────────
-  const plSC = insertSuite.run('poland', 'Shipment Consolidation', 'Consolidation flows for Poland region').lastInsertRowid;
-  [
-    { name: 'Create Consolidation', desc: 'Verify multiple shipments can be consolidated into a single load', pre: 'Multiple planned shipments to the same destination lane.', steps: ['Navigate to Consolidation Manager', 'Click New Consolidation', 'Select candidate shipments from the list', 'Choose consolidation type (Hub or Direct)', 'Assign equipment and carrier', 'Click Build Consolidation'], exp: 'Consolidated load created with all selected shipments linked.', pri: 'high' },
-    { name: 'Update Consolidation', desc: 'Verify shipments can be added or removed from a consolidation', pre: 'Active consolidation exists in Planning status.', steps: ['Open consolidation by ID', 'Click Manage Shipments', 'Remove one shipment from the load', 'Add a different shipment', 'Recalculate weight and volume', 'Save changes'], exp: 'Consolidation updated with new shipment composition.', pri: 'medium' },
-    { name: 'Execute Consolidation', desc: 'Verify consolidated load can be dispatched', pre: 'Consolidation approved and all documents generated.', steps: ['Open consolidation', 'Verify all shipments have pick-up confirmation', 'Click Dispatch', 'Confirm departure time', 'Verify status changes to In Transit'], exp: 'Load dispatched and all linked shipments show In Transit status.', pri: 'high' },
-  ].forEach(c => insertCase.run(plSC, 'poland', c.name, c.desc, c.pre, JSON.stringify(c.steps), c.exp, c.pri));
-
-  // ── Turkey ────────────────────────────────────────────────────────────────
-  const trSAP = insertSuite.run('turkey', 'SAP Integration', 'SAP ERP integration validation for Turkey').lastInsertRowid;
-  [
-    { name: 'SAP Order Sync', desc: 'Verify sales orders from SAP are received and created in OTM', pre: 'SAP integration is configured. Test sales order triggered in SAP.', steps: ['Trigger a test sales order in SAP SD', 'Check OTM integration queue', 'Verify order message received without errors', 'Open created order in OTM', 'Validate all fields match SAP data'], exp: 'Order is created in OTM with all SAP fields correctly mapped.', pri: 'high' },
-    { name: 'SAP Status Update', desc: 'Verify OTM shipment status is pushed back to SAP', pre: 'OTM shipment in transit linked to a SAP delivery.', steps: ['Update shipment to Delivered in OTM', 'Check outbound integration queue', 'Verify status update message sent', 'Confirm delivery status updated in SAP MM'], exp: 'SAP delivery document updated with confirmed delivery date from OTM.', pri: 'high' },
-    { name: 'SAP Error Handling', desc: 'Verify integration error messages are captured and alert is raised', pre: 'Integration error simulation configured in test.', steps: ['Send a malformed order message to OTM', 'Check integration error log', 'Verify error is captured with message details', 'Verify alert notification is generated'], exp: 'Error is logged with full details. Alert sent to integration admin.', pri: 'medium' },
-  ].forEach(c => insertCase.run(trSAP, 'turkey', c.name, c.desc, c.pre, JSON.stringify(c.steps), c.exp, c.pri));
-
-  const trSP = insertSuite.run('turkey', 'Shipment Planning', 'Route planning and optimisation for Turkey').lastInsertRowid;
-  [
-    { name: 'Create Plan', desc: 'Verify a shipment plan can be created for unplanned orders', pre: 'Multiple unplanned orders exist for the same origin region.', steps: ['Navigate to Shipment Planning', 'Click New Plan', 'Set planning horizon dates', 'Select eligible orders', 'Click Run Planner'], exp: 'Planning engine runs and generates proposed shipments for selected orders.', pri: 'high' },
-    { name: 'Optimize Routes', desc: 'Verify route optimisation reduces total cost', pre: 'A draft shipment plan exists.', steps: ['Open existing plan', 'Click Optimise Routes', 'Wait for optimisation engine to complete', 'Compare cost before and after', 'Review route changes'], exp: 'Optimised plan shows reduced total transport cost vs baseline.', pri: 'medium' },
-    { name: 'Execute Plan', desc: 'Verify planned shipments can be confirmed and tendered', pre: 'Approved shipment plan with carrier assignments.', steps: ['Open approved plan', 'Click Execute Plan', 'Confirm all shipments to tender', 'Verify carrier tender notifications sent', 'Check shipment statuses updated'], exp: 'All shipments tendered to carriers and statuses updated to Tendered.', pri: 'high' },
-  ].forEach(c => insertCase.run(trSP, 'turkey', c.name, c.desc, c.pre, JSON.stringify(c.steps), c.exp, c.pri));
-
-  // ── Germany ────────────────────────────────────────────────────────────────
-  const deSM = insertSuite.run('germany', 'Shipment Management', 'Shipment management for Germany region').lastInsertRowid;
-  [
-    { name: 'Create Shipment', desc: 'Create a domestic Germany shipment', pre: 'Order exists. German carrier configured.', steps: ['Navigate to Shipment Management', 'Create new shipment for Germany lane', 'Assign DHL or DB Schenker carrier', 'Set ADR (hazmat) flag if required', 'Submit shipment'], exp: 'Shipment created with German carrier assignment and CMR document generated.', pri: 'high' },
-    { name: 'Update Shipment', desc: 'Modify shipment details before dispatch', pre: 'Shipment in Planning status.', steps: ['Open shipment', 'Edit stop sequence', 'Update contact details', 'Save changes', 'Verify changes reflected'], exp: 'All changes saved and visible in shipment history.', pri: 'medium' },
-    { name: 'Track Shipment', desc: 'Verify shipment tracking events', pre: 'Shipment in active transit.', steps: ['Open tracking view', 'Verify GPS events showing', 'Check milestone events', 'Verify ETA is updated'], exp: 'Tracking shows accurate location and ETA data.', pri: 'medium' },
-  ].forEach(c => insertCase.run(deSM, 'germany', c.name, c.desc, c.pre, JSON.stringify(c.steps), c.exp, c.pri));
-
-  // ── Brazil ────────────────────────────────────────────────────────────────
-  const brOM = insertSuite.run('brazil', 'Order Management', 'Order management for Brazil region').lastInsertRowid;
-  [
-    { name: 'Create Order', desc: 'Create a new freight order for Brazil domestic lane', pre: 'User logged in. Brazil locations configured. NF-e document type active.', steps: ['Navigate to Order Management', 'Click New Order', 'Select Brazil origin and destination', 'Enter commodity details in Portuguese', 'Attach NF-e document reference', 'Submit order'], exp: 'Order created with Brazilian tax document reference and NF-e fields populated.', pri: 'high' },
-    { name: 'Update Order', desc: 'Update order commodity and weight details', pre: 'Brazil order in New status.', steps: ['Open order', 'Click Edit', 'Update commodity weight', 'Add secondary commodity line', 'Recalculate volume', 'Save'], exp: 'Order updated with new commodity data.', pri: 'medium' },
-    { name: 'Search Orders', desc: 'Search orders by NF-e number or date range', pre: 'Multiple Brazil orders exist.', steps: ['Go to Order Search', 'Enter NF-e reference number', 'Click Search', 'Verify matching orders returned', 'Check status and details'], exp: 'Search returns correct order linked to the NF-e reference.', pri: 'low' },
-  ].forEach(c => insertCase.run(brOM, 'brazil', c.name, c.desc, c.pre, JSON.stringify(c.steps), c.exp, c.pri));
+  insertCase.run(suite, 'poland',
+    'Poland OTM E2E - SAP order integration with delivery note',
+    'End-to-end SAP order flow: login, role switch to POLAND_PLANNER, send T1 initial order, send T2 delivery note update, and verify all reference numbers in OTM.',
+    'OTM instance accessible. WMServlet credentials valid. XML fixtures present. User LEL7597_TMS with POLAND_PLANNER role exists.',
+    JSON.stringify([
+      'Navigate to OTM URL','Login page loaded','Enter username (LEL7597_TMS)','Enter password','Click Sign In','Wait for OTM homepage to load',
+      'Click user menu','Settings and Actions panel opened','Select role POLAND_PLANNER','Click Save and Close','Wait for homepage to reload with new role',
+      'Send T1 XML to WMServlet','Verify T1 response is 200 OK','Verify TransmissionAck received',
+      'Open Order Release finder','Order Release finder loaded','Enter order ID','Click Search','Verify Total Found: 1',
+      'Verify yellow indicator (HOLD)','Verify status PLANNING_PLANNED - HOLD','Verify DELIVERY column is empty','Screenshot T1 state',
+      'Send T2 XML to WMServlet','Verify T2 response is 200 OK','Verify TransmissionAck received',
+      'Poll until blue indicator appears','Verify blue indicator (NEW)','Verify status PLANNING_NEW',
+      'Verify DELIVERY column shows 0087299329','Screenshot T2 state',
+      'Open order detail','Order detail loading','Order detail page loaded','Scroll to Reference Numbers','Reference Numbers section visible',
+      'Verify DELIVERY_NOTE_NUMBER = 0087299329','Verify COMPANY_CODE = 3840','Verify CUSTOMER_PO = 2606084341861',
+      'Verify PALLET_COUNT = 2','Verify PALLET_DECIMAL = 1.818','Verify SAP_ORDER_TYPE = ZORS','Screenshot reference numbers',
+    ]),
+    'SAP order created via T1, updated with delivery note via T2, all 6 reference numbers verified in OTM.',
+    'high'
+  );
 }
 
 // ── Run functions ─────────────────────────────────────────────────────────
@@ -309,7 +221,24 @@ function deleteSuite(id) {
 
 // ── Registry — Case functions ─────────────────────────────────────────────
 function getTestCasesBySuite(suiteId) {
-  return db().prepare('SELECT * FROM test_cases WHERE suite_id = ? ORDER BY priority DESC, name').all(suiteId);
+  return db().prepare(`
+    SELECT tc.*,
+      tr.status       AS last_run_status,
+      tr.duration_ms  AS last_run_duration_ms,
+      r.finished_at   AS last_run_at
+    FROM test_cases tc
+    LEFT JOIN test_results tr ON tr.id = (
+      SELECT id FROM test_results
+      WHERE test_name = tc.name
+         OR suite_name = tc.name
+         OR test_name LIKE '%' || tc.name || '%'
+         OR suite_name LIKE '%' || tc.name || '%'
+      ORDER BY id DESC LIMIT 1
+    )
+    LEFT JOIN runs r ON r.id = tr.run_id
+    WHERE tc.suite_id = ?
+    ORDER BY tc.priority DESC, tc.name
+  `).all(suiteId);
 }
 
 function getTestCasesByRegion(region) {
@@ -346,10 +275,87 @@ function deleteTestCase(id) {
   db().prepare('DELETE FROM test_cases WHERE id = ?').run(id);
 }
 
+function getLatestStepsForTestName(testName) {
+  // Try exact match, then suite_name match, then partial test_name match
+  let row = db().prepare(
+    `SELECT steps FROM test_results WHERE test_name=? ORDER BY id DESC LIMIT 1`
+  ).get(testName);
+  if (!row) {
+    row = db().prepare(
+      `SELECT steps FROM test_results WHERE suite_name LIKE ? ORDER BY id DESC LIMIT 1`
+    ).get('%' + testName + '%');
+  }
+  if (!row) {
+    row = db().prepare(
+      `SELECT steps FROM test_results WHERE test_name LIKE ? ORDER BY id DESC LIMIT 1`
+    ).get('%' + testName + '%');
+  }
+  return row ? row.steps : null;
+}
+
+// ── Analytics ─────────────────────────────────────────────────────────────
+function getFlakySteps() {
+  const rows = db().prepare(
+    "SELECT steps FROM test_results WHERE steps IS NOT NULL AND steps != '[]' ORDER BY id DESC LIMIT 40"
+  ).all();
+  const map = {};
+  for (const r of rows) {
+    let steps; try { steps = JSON.parse(r.steps); } catch (_) { continue; }
+    for (const s of steps) {
+      if (!s.name) continue;
+      if (!map[s.name]) map[s.name] = { pass: 0, fail: 0 };
+      if (s.status === 'pass' || s.status === 'passed') map[s.name].pass++;
+      else if (s.status === 'fail' || s.status === 'failed') map[s.name].fail++;
+    }
+  }
+  return Object.entries(map)
+    .filter(([, v]) => v.pass > 0 && v.fail > 0)
+    .map(([name, v]) => ({ name, pass: v.pass, fail: v.fail }))
+    .sort((a, b) => b.fail - a.fail);
+}
+
+function getPhaseTimingFromLastRun() {
+  // Prefer a full-suite run (>=2 tests) so all 7 phases have data; fall back to any run
+  const run = db().prepare(
+    "SELECT * FROM runs WHERE status IN ('passed','failed') AND total_tests >= 2 ORDER BY id DESC LIMIT 1"
+  ).get() || db().prepare(
+    "SELECT * FROM runs WHERE status IN ('passed','failed') ORDER BY id DESC LIMIT 1"
+  ).get();
+
+  const ALL_PHASES = [
+    { name: 'Login',              ms: 0, keywords: ['navigat','idcs','oracle','sign in','username','password','login page','click sign','verifying otm','wait for otm','capturing homepage','homepage loaded'] },
+    { name: 'Role Switch',        ms: 0, keywords: ['role','planner','save and close','user menu','settings and actions','reload with'] },
+    { name: 'Send T1',            ms: 0, keywords: ['send t1','t1 xml','wmservlet','transmissionack','t1 response','verify t1'] },
+    { name: 'Search & Verify T1', ms: 0, keywords: ['order release','finder','search','total found','yellow indicator','planning_planned','hold','delivery column is empty','screenshot t1'] },
+    { name: 'Send T2',            ms: 0, keywords: ['send t2','t2 xml','t2 response','verify t2','delivery note'] },
+    { name: 'T2 Polling',         ms: 0, keywords: ['poll','blue indicator','planning_new','delivery column shows','screenshot t2','open order','order detail'] },
+    { name: 'Reference Numbers',  ms: 0, keywords: ['reference','scroll to','delivery_note_number','company_code','customer_po','pallet','sap_order','screenshot reference'] },
+  ];
+
+  if (run) {
+    const tests = db().prepare('SELECT steps FROM test_results WHERE run_id = ?').all(run.id);
+    for (const t of tests) {
+      let steps; try { steps = JSON.parse(t.steps || '[]'); } catch (_) { continue; }
+      for (const s of steps) {
+        const n = (s.name || '').toLowerCase();
+        const ms = s.duration_ms || 0;
+        for (const p of ALL_PHASES) {
+          if (p.keywords.some(k => n.includes(k))) { p.ms += ms; break; }
+        }
+      }
+    }
+  }
+
+  // Always return all 7 phases; zero-time phases show as 0s
+  return ALL_PHASES.map(p => ({ name: p.name, seconds: Math.round(p.ms / 1000) }));
+}
+
 module.exports = {
   createRun, updateRun, saveTestResult,
   getRuns, getRunById, getTestsByRunId, getTestById, getPassRateTrend,
   getSuitesByRegion, createSuite, updateSuite, deleteSuite,
   getTestCasesBySuite, getTestCasesByRegion, getTestCaseById,
   createTestCase, updateTestCase, deleteTestCase,
+  getLatestStepsForTestName,
+  getFlakySteps, getPhaseTimingFromLastRun,
 };
