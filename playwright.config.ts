@@ -31,6 +31,11 @@ export default defineConfig({
     actionTimeout: 30000,
     navigationTimeout: 60000,
     ignoreHTTPSErrors: true,
+    launchOptions: {
+      args: process.env.RENDER
+        ? ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        : [],
+    },
   },
 
   projects: [
