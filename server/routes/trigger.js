@@ -116,9 +116,10 @@ function handleTrigger(req, res, upath) {
 
       const baseEnv = {
         ...process.env,
-        OTM_RUN_ID:    String(runId),
-        OTM_TEST_CASE: testCase,
-        HEADLESS:      '1',
+        OTM_RUN_ID:               String(runId),
+        OTM_TEST_CASE:            testCase,
+        HEADLESS:                 '1',
+        PLAYWRIGHT_BROWSERS_PATH: '0',
       };
 
       const finish = (exitCode) => {
