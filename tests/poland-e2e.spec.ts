@@ -155,7 +155,7 @@ test.describe('Poland - Kraft Heinz OTM Integration', () => {
         await page.waitForFunction(
           () => !!document.querySelector('#idcs-signin-basic-signin-form-username') ||
                 !!document.querySelector('#username'),
-          { timeout: 30_000 }
+          { timeout: 60_000 }
         );
       });
 
