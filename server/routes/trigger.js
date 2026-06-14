@@ -52,8 +52,12 @@ function runCmd(cmd, env, stepOffset) {
       });
     });
 
-    child.stderr.on('data', () => {});
-    child.on('close', code => resolve(code));
+    child.stderr.on('data', chunk => { console.error('[playwright]', chunk.toString().trim()); });
+    child.stdout.on('data', chunk => {
+      const txt = chunk.toString();
+      if (!txt.startsWith('{')) console.log('[playwright]', txt.trim());
+    });
+    child.on('close', code => { console.log('[playwright] exit code:', code); resolve(code); });
   });
 }
 
