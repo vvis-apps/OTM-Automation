@@ -5,7 +5,7 @@
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
-    "build": "SKIP_BUILD=1 npm install --prefix client && npm run build --prefix client && npx playwright install chromium --with-deps",
+    "build": "SKIP_BUILD=1 npm install --prefix client && npm run build --prefix client && npx playwright install chromium",
     "postinstall": "node -e \"if(!process.env.SKIP_BUILD)require('child_process').execSync('npm run build',{stdio:'inherit'})\"",
     "test:login": "npx playwright test tests/login.spec.ts",
     "test:all": "npx playwright test",
