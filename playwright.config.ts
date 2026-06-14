@@ -36,7 +36,11 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'], channel: 'msedge' },
+      use: {
+        ...devices['Desktop Chrome'],
+        // Use msedge on Windows locally, bundled Chromium on Linux/Render
+        ...(process.env.RENDER ? {} : { channel: 'msedge' }),
+      },
     },
   ],
 });
