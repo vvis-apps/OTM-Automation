@@ -91,6 +91,10 @@ export async function takeStepScreenshot(page: Page, stepName: string): Promise<
     const filename  = safeName + '_' + Date.now() + '.png';
     const filePath  = path.join(SCREENSHOTS_DIR, filename);
 
+    // Wait for page to fully settle before capturing
+    await page.waitForLoadState('domcontentloaded', { timeout: 10_000 }).catch(() => {});
+    await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+
     const buffer = await page.screenshot({ fullPage: false });
     fs.writeFileSync(filePath, buffer);
 
