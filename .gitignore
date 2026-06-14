@@ -10,3 +10,8 @@ otm-portal.db-shm
 otm-portal.db-wal
 .env
 regions.json
+*.log
+server-err.log
+server.err.log
+client/client/
+otm-portal-ui.html
