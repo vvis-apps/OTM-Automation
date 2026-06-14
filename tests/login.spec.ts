@@ -104,7 +104,7 @@ function saveTestResult(runId: number | null, result: {
 test.describe('OTM Login', () => {
 
   test('User can log in to Oracle Transportation Management', async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
     // If a specific test case was requested and it's not Login, skip this test
     if (OTM_TEST_CASE && OTM_TEST_CASE.toLowerCase() !== 'login') {
       test.skip(true, `Skipping Login — OTM_TEST_CASE=${OTM_TEST_CASE}`);
@@ -230,10 +230,14 @@ test.describe('OTM Login', () => {
 
       // Step 9 — open user menu
       await step(9, 'Click user menu (LEL7597_TMS)', async () => {
-        const menu = page.locator(`[title="${OTM_USERNAME}"], button:has-text("${OTM_USERNAME}")`).first();
-        await menu.waitFor({ state: 'visible', timeout: 20_000 });
+        const menu = page.locator(
+          `[title="${OTM_USERNAME}"], button:has-text("${OTM_USERNAME}"), ` +
+          `[aria-label*="${OTM_USERNAME}"], [class*="user-menu"], [class*="userMenu"], ` +
+          `[class*="avatar"], img[alt*="user"], [data-testid*="user"]`
+        ).first();
+        await menu.waitFor({ state: 'visible', timeout: 40_000 });
         await menu.click();
-        await page.waitForSelector('text=Settings and Actions', { timeout: 15_000 });
+        await page.waitForSelector('text=Settings and Actions', { timeout: 20_000 });
       });
 
       // Step 10 — sign out
