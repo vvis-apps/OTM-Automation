@@ -146,20 +146,23 @@ function handleTrigger(req, res, upath) {
 
       const generateReport = () => runCmd('npm run report', baseEnv, 0).catch(() => {});
 
+      const PW = 'npx playwright test';
       const runTests = () => {
         if (suite === 'all') {
-          runCmd('npm run test:login', { ...baseEnv, OTM_TEST_CASE: 'login' }, 0)
+          runCmd(`${PW} tests/login.spec.ts`, { ...baseEnv, OTM_TEST_CASE: 'login' }, 0)
             .then(loginCode => {
               const divider = { type: 'step', step: 11, total: 11, name: '── Poland OTM E2E Starting ──', status: 'pass', duration_ms: 0 };
               live.steps.push(divider);
               broadcastEvent('step', divider);
-              return runCmd('npm run test:poland', { ...baseEnv, OTM_TEST_CASE: 'poland-e2e' }, 100)
+              return runCmd(`${PW} tests/poland-e2e.spec.ts`, { ...baseEnv, OTM_TEST_CASE: 'poland-e2e' }, 100)
                 .then(polandCode => generateReport().then(() => finish(loginCode === 0 && polandCode === 0 ? 0 : 1)));
             })
             .catch(err => { broadcastEvent('error', { message: err.message }); finish(1); });
         } else {
           const tcLower = testCase.toLowerCase();
-          const cmd = tcLower.includes('login') ? 'npm run test:login' : 'npm run test:poland';
+          const cmd = tcLower.includes('login')
+            ? `${PW} tests/login.spec.ts`
+            : `${PW} tests/poland-e2e.spec.ts`;
           runCmd(cmd, baseEnv, 0)
             .then(code => generateReport().then(() => finish(code)))
             .catch(err => { broadcastEvent('error', { message: err.message }); finish(1); });
