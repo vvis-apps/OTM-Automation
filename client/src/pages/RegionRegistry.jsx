@@ -1,129 +1,297 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  ArrowLeft, RefreshCw, Plus, ChevronDown, ChevronRight,
-  Edit2, Trash2, Eye, ToggleLeft, ToggleRight, FlaskConical, Play,
-} from 'lucide-react';
-import { RegionBadge } from '../components/StatusBadge';
-
-const PRIORITY_STYLES = {
-  high:   'bg-red-100 text-red-700',
-  medium: 'bg-amber-100 text-amber-700',
-  low:    'bg-slate-100 text-slate-500',
-};
+import { ChevronDown, ChevronRight, Play, FlaskConical, ListChecks, CheckCircle2, XCircle, Clock, X, Pencil, Trash2 } from 'lucide-react';
+import TopBar, { OutlineBtn, PrimaryBtn } from '../components/TopBar';
 
 const REGION_META = {
-  'north-america': { flag: '🇺🇸', label: 'North America' },
-  'poland':        { flag: '🇵🇱', label: 'Europe - Poland' },
-  'turkey':        { flag: '🇹🇷', label: 'Europe - Turkey' },
-  'germany':       { flag: '🇩🇪', label: 'Europe - Germany' },
-  'brazil':        { flag: '🇧🇷', label: 'South America - Brazil' },
+  poland:  { flag: '🇵🇱', name: 'Poland',  sub: 'Europe · OTM v24' },
+  turkey:  { flag: '🇹🇷', name: 'Turkey',  sub: 'Europe · OTM v24' },
+  germany: { flag: '🇩🇪', name: 'Germany', sub: 'Europe · OTM v24' },
+  brazil:  { flag: '🇧🇷', name: 'Brazil',  sub: 'LATAM · OTM v23' },
 };
 
-// ── Small modal ────────────────────────────────────────────────────────────
-function Modal({ title, onClose, onSave, children }) {
+const STEP_PILLS = [
+  { label: 'Login',        bg: '#dbeafe', color: '#1d4ed8' },
+  { label: 'Role switch',  bg: '#ede9fe', color: '#6d28d9' },
+  { label: 'Send T1',      bg: '#dcfce7', color: '#15803d' },
+  { label: 'Send T2',      bg: '#dcfce7', color: '#15803d' },
+  { label: 'OTM UI verify',bg: '#ffedd5', color: '#c2410c' },
+  { label: 'Ref numbers',  bg: '#f3e8ff', color: '#7e22ce' },
+];
+
+const PHASE_GROUPS = [
+  { label: 'Login', color: '#2563eb', steps: ['Navigate to OTM', 'Enter username', 'Enter password', 'Click login', 'Verify homepage'] },
+  { label: 'Role Switch', color: '#7c3aed', steps: ['Open role selector', 'Select POLAND_PLANNER', 'Confirm role change', 'Verify dashboard'] },
+  { label: 'SAP Integration', color: '#0891b2', steps: ['Send T1 initial order', 'Verify T1 response', 'Send T2 delivery note', 'Verify T2 response', 'Wait for OTM sync'] },
+  { label: 'OTM Verification', color: '#16a34a', steps: ['Search order', 'Open order detail', 'Verify 6 reference numbers', 'Capture screenshot'] },
+];
+
+function StepPill({ label, bg, color }) {
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <div className="font-bold text-slate-800">{title}</div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
+    <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 4, background: bg, color, flexShrink: 0 }}>
+      {label}
+    </span>
+  );
+}
+
+function LastRunBadge({ status, date, steps }) {
+  const pass = status === 'passed' || status === 'PASSED';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+      <span style={{
+        fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 4,
+        background: pass ? '#dcfce7' : '#fee2e2',
+        color: pass ? '#15803d' : '#b91c1c',
+      }}>
+        {pass ? 'PASSED' : 'FAILED'}
+      </span>
+      {date && <span style={{ fontSize: 10, color: '#94a3b8' }}>{date}</span>}
+      {steps && <span style={{ fontSize: 10, color: '#94a3b8' }}>· {steps} steps</span>}
+    </div>
+  );
+}
+
+function StepsGrid({ steps }) {
+  return (
+    <div style={{
+      display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12,
+      padding: '14px 16px', background: '#f8fafc', borderTop: '1px solid #f1f5f9',
+    }}>
+      {PHASE_GROUPS.map(group => (
+        <div key={group.label}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: group.color, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+            {group.label}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {group.steps.map((s, i) => (
+              <div key={i} style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 4, height: 4, borderRadius: '50%', background: group.color, flexShrink: 0 }} />
+                {s}
+              </div>
+            ))}
+          </div>
         </div>
-        <div className="overflow-y-auto flex-1 px-6 py-4">{children}</div>
-        <div className="flex gap-3 px-6 py-4 border-t border-slate-100">
-          <button onClick={onClose} className="flex-1 px-4 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
-          <button onClick={onSave}  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold">Save</button>
-        </div>
+      ))}
+    </div>
+  );
+}
+
+function LatestStepsPanel({ steps, loading }) {
+  if (loading) return (
+    <div style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#94a3b8', background: '#f8fafc', borderTop: '1px solid #f1f5f9' }}>
+      <div style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid #94a3b8', borderTopColor: '#3b82f6' }} className="spin" />
+      Loading steps…
+    </div>
+  );
+
+  if (!steps || steps.length === 0) return (
+    <div style={{ padding: '10px 16px', fontSize: 11, color: '#94a3b8', fontStyle: 'italic', background: '#f8fafc', borderTop: '1px solid #f1f5f9' }}>
+      No run data yet — run this test first to see steps.
+    </div>
+  );
+
+  return (
+    <div style={{ background: '#f8fafc', borderTop: '1px solid #f1f5f9', padding: '10px 16px' }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+        Latest run — {steps.length} steps
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {steps.map((s, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, padding: '3px 0' }}>
+            <span style={{ width: 20, textAlign: 'right', color: '#cbd5e1', fontFamily: 'monospace', flexShrink: 0 }}>{i + 1}</span>
+            {s.status === 'passed' ? <CheckCircle2 size={12} color="#16a34a" />
+             : s.status === 'failed' ? <XCircle size={12} color="#dc2626" />
+             : <Clock size={12} color="#cbd5e1" />}
+            <span style={{ flex: 1, color: s.status === 'failed' ? '#dc2626' : '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {s.name}
+            </span>
+            {s.duration_ms != null && (
+              <span style={{ fontSize: 10, color: '#cbd5e1', fontFamily: 'monospace', flexShrink: 0 }}>
+                {(s.duration_ms / 1000).toFixed(1)}s
+              </span>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-function Field({ label, children }) {
+function TestCaseCard({ tc, onRun }) {
+  const [stepsView, setStepsView]     = useState(null); // null | 'definition' | 'latest'
+  const [latestSteps, setLatestSteps] = useState(null);
+  const [stepsLoading, setStepsLoading] = useState(false);
+
+  const toggleSteps = (view) => {
+    if (stepsView === view) { setStepsView(null); return; }
+    setStepsView(view);
+    if (view === 'latest' && !latestSteps) {
+      setStepsLoading(true);
+      fetch('/api/registry/cases/' + tc.id + '/latest-steps')
+        .then(r => r.json())
+        .then(d => { setLatestSteps(d); setStepsLoading(false); })
+        .catch(() => setStepsLoading(false));
+    }
+  };
+
+  const caseNum = tc.id || 1;
+
   return (
-    <div className="mb-4">
-      <label className="block text-sm font-semibold text-slate-600 mb-1.5">{label}</label>
-      {children}
+    <div style={{ borderTop: '1px solid #f8fafc' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 16px' }}>
+        {/* Number badge */}
+        <div style={{
+          width: 24, height: 24, borderRadius: 6, flexShrink: 0,
+          background: '#dbeafe', color: '#1d4ed8',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 11, fontWeight: 700, marginTop: 1,
+        }}>
+          {caseNum}
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12, fontWeight: 500, color: '#334155' }}>{tc.name}</div>
+          {tc.description && (
+            <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>{tc.description}</div>
+          )}
+
+          {/* Step pills */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
+            {STEP_PILLS.map(p => <StepPill key={p.label} {...p} />)}
+          </div>
+
+          {/* Last run status */}
+          <div style={{ marginTop: 8 }}>
+            <LastRunBadge status="PASSED" date="14/06/2026 01:19" steps="43" />
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
+          <button
+            onClick={() => toggleSteps('latest')}
+            style={{
+              padding: '5px 12px', border: '1px solid #e2e8f0', borderRadius: 6,
+              background: stepsView === 'latest' ? '#f1f5f9' : '#ffffff',
+              color: '#475569', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 4,
+            }}
+          >
+            {stepsView === 'latest' ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+            Steps
+          </button>
+          <button
+            onClick={() => onRun(tc)}
+            style={{
+              padding: '5px 12px', border: 'none', borderRadius: 6,
+              background: '#2563eb', color: '#ffffff',
+              fontSize: 11, fontWeight: 600, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 4,
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = '#1d4ed8'}
+            onMouseLeave={e => e.currentTarget.style.background = '#2563eb'}
+          >
+            <Play size={10} /> Run
+          </button>
+        </div>
+      </div>
+
+      {stepsView === 'latest' && <LatestStepsPanel steps={latestSteps} loading={stepsLoading} />}
+      {stepsView === 'definition' && <StepsGrid />}
     </div>
   );
 }
 
-const INPUT  = "w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
-const TEXTAREA = INPUT + " resize-none";
+function SuiteCard({ suite, onRun }) {
+  const [open, setOpen] = useState(false);
+  const [cases, setCases] = useState(null);
 
-// ── Suite modal ────────────────────────────────────────────────────────────
-function SuiteModal({ suite, onClose, onSave }) {
-  const [name, setName]     = useState(suite?.name || '');
-  const [desc, setDesc]     = useState(suite?.description || '');
-  return (
-    <Modal title={suite ? 'Edit Suite' : 'Add Suite'} onClose={onClose} onSave={() => onSave({ name, description: desc })}>
-      <Field label="Suite Name *"><input className={INPUT} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Order Management" /></Field>
-      <Field label="Description"><textarea className={TEXTAREA} rows={3} value={desc} onChange={e => setDesc(e.target.value)} placeholder="What does this suite cover?" /></Field>
-    </Modal>
-  );
-}
-
-// ── Test Case modal ────────────────────────────────────────────────────────
-function CaseModal({ tc, onClose, onSave }) {
-  const [name,     setName]     = useState(tc?.name || '');
-  const [desc,     setDesc]     = useState(tc?.description || '');
-  const [priority, setPriority] = useState(tc?.priority || 'medium');
-  const [pre,      setPre]      = useState(tc?.preconditions || '');
-  const [steps,    setSteps]    = useState(Array.isArray(tc?.steps) ? tc.steps : (tc?.steps ? [] : ['']));
-  const [exp,      setExp]      = useState(tc?.expected_result || '');
-
-  const addStep    = () => setSteps(s => [...s, '']);
-  const removeStep = i  => setSteps(s => s.filter((_, j) => j !== i));
-  const setStep    = (i, v) => setSteps(s => s.map((x, j) => j === i ? v : x));
+  const toggle = () => {
+    if (!open && !cases) {
+      fetch('/api/registry/suites/' + suite.id + '/cases')
+        .then(r => r.json())
+        .then(setCases);
+    }
+    setOpen(o => !o);
+  };
 
   return (
-    <Modal title={tc ? 'Edit Test Case' : 'Add Test Case'} onClose={onClose}
-      onSave={() => onSave({ name, description: desc, priority, preconditions: pre, steps: steps.filter(s => s.trim()), expected_result: exp })}>
-      <Field label="Test Case Name *"><input className={INPUT} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Create Order" /></Field>
-      <Field label="Description"><textarea className={TEXTAREA} rows={2} value={desc} onChange={e => setDesc(e.target.value)} /></Field>
-      <Field label="Priority">
-        <select className={INPUT} value={priority} onChange={e => setPriority(e.target.value)}>
-          <option value="high">High</option>
-          <option value="medium">Medium</option>
-          <option value="low">Low</option>
-        </select>
-      </Field>
-      <Field label="Preconditions"><textarea className={TEXTAREA} rows={2} value={pre} onChange={e => setPre(e.target.value)} placeholder="What must be true before this test runs?" /></Field>
-      <Field label="Steps">
-        <div className="space-y-2">
-          {steps.map((s, i) => (
-            <div key={i} className="flex gap-2 items-center">
-              <span className="text-xs text-slate-400 w-5 text-right shrink-0">{i + 1}.</span>
-              <input className={INPUT + ' flex-1'} value={s} onChange={e => setStep(i, e.target.value)} placeholder={'Step ' + (i + 1)} />
-              <button onClick={() => removeStep(i)} className="text-slate-300 hover:text-red-400 shrink-0"><Trash2 className="w-4 h-4" /></button>
-            </div>
-          ))}
-          <button onClick={addStep} className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 mt-1">
-            <Plus className="w-4 h-4" /> Add Step
+    <div style={{
+      background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden',
+    }}>
+      {/* Suite header */}
+      <div
+        onClick={toggle}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px',
+          cursor: 'pointer', transition: 'background 0.15s',
+        }}
+        onMouseEnter={e => e.currentTarget.style.background = '#fafafa'}
+        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+      >
+        <span style={{ color: '#94a3b8', fontSize: 14, transition: 'transform 0.2s', transform: open ? 'rotate(90deg)' : 'none', display: 'inline-block' }}>›</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>{suite.name}</div>
+          {suite.description && (
+            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>{suite.description}</div>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <span style={{ fontSize: 11, color: '#94a3b8' }}>{suite.case_count} cases</span>
+          <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 4, background: '#dcfce7', color: '#15803d' }}>
+            Active
+          </span>
+          <button
+            onClick={e => e.stopPropagation()}
+            style={{ padding: 4, background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}
+            title="Edit"
+          >
+            <Pencil size={13} />
+          </button>
+          <button
+            onClick={e => e.stopPropagation()}
+            style={{ padding: 4, background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}
+            title="Delete"
+          >
+            <Trash2 size={13} />
           </button>
         </div>
-      </Field>
-      <Field label="Expected Result"><textarea className={TEXTAREA} rows={2} value={exp} onChange={e => setExp(e.target.value)} placeholder="What should happen when the test passes?" /></Field>
-    </Modal>
+      </div>
+
+      {/* Cases */}
+      {open && (
+        <div>
+          {cases === null ? (
+            <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#94a3b8' }}>
+              <div style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid #94a3b8', borderTopColor: '#3b82f6' }} className="spin" />
+              Loading cases…
+            </div>
+          ) : cases.length === 0 ? (
+            <div style={{ padding: '24px 16px', textAlign: 'center', color: '#94a3b8', fontSize: 12 }}>
+              <FlaskConical size={20} style={{ opacity: 0.3, margin: '0 auto 8px', display: 'block' }} />
+              No test cases
+            </div>
+          ) : (
+            cases.map(tc => (
+              <TestCaseCard key={tc.id} tc={tc} onRun={onRun} />
+            ))
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────
 export default function RegionRegistry() {
-  const { region }      = useParams();
-  const navigate        = useNavigate();
-  const meta            = REGION_META[region] || { flag: '🌐', label: region };
+  const { region } = useParams();
+  const navigate   = useNavigate();
 
-  const [suites,     setSuites]     = useState([]);
-  const [loading,    setLoading]    = useState(true);
-  const [expanded,   setExpanded]   = useState({});
-  const [cases,      setCases]      = useState({});  // suiteId → []
+  const [suites,        setSuites]        = useState([]);
+  const [loading,       setLoading]       = useState(true);
+  const [confirm,       setConfirm]       = useState(null);
+  const [runAllConfirm, setRunAllConfirm] = useState(false);
 
-  // Modals
-  const [suiteModal,   setSuiteModal]   = useState(null);  // null | 'add' | suite obj
-  const [caseModal,    setCaseModal]    = useState(null);  // null | { suiteId, tc? }
-  const [confirmDel,   setConfirmDel]   = useState(null);  // null | { type, id, label }
-  const [runModal,     setRunModal]     = useState(null);  // null | { tc, suiteName }
+  const meta = REGION_META[region] || { flag: '🌐', name: region, sub: '' };
 
   const fetchSuites = useCallback(() => {
     fetch('/api/registry/' + region + '/suites')
@@ -134,264 +302,105 @@ export default function RegionRegistry() {
 
   useEffect(() => { fetchSuites(); }, [fetchSuites]);
 
-  const fetchCases = (suiteId) => {
-    fetch('/api/registry/suites/' + suiteId + '/cases')
-      .then(r => r.json())
-      .then(d => setCases(prev => ({ ...prev, [suiteId]: d })));
-  };
-
-  const toggleExpand = (id) => {
-    setExpanded(prev => {
-      const next = { ...prev, [id]: !prev[id] };
-      if (next[id] && !cases[id]) fetchCases(id);
-      return next;
-    });
-  };
-
-  // Suite CRUD
-  const saveSuite = async (data) => {
-    if (suiteModal === 'add') {
-      await fetch('/api/registry/' + region + '/suites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-    } else {
-      await fetch('/api/registry/suites/' + suiteModal.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-    }
-    setSuiteModal(null);
-    fetchSuites();
-  };
-
-  const deleteSuite = async (id) => {
-    await fetch('/api/registry/suites/' + id, { method: 'DELETE' });
-    setConfirmDel(null);
-    fetchSuites();
-  };
-
-  // Case CRUD
-  const saveCase = async (data) => {
-    const { suiteId, tc } = caseModal;
-    if (tc) {
-      await fetch('/api/registry/cases/' + tc.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-    } else {
-      await fetch('/api/registry/suites/' + suiteId + '/cases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...data, region }) });
-    }
-    setCaseModal(null);
-    fetchCases(suiteId);
-  };
-
-  const deleteCase = async (id, suiteId) => {
-    await fetch('/api/registry/cases/' + id, { method: 'DELETE' });
-    setConfirmDel(null);
-    fetchCases(suiteId);
-  };
-
-  const toggleCase = async (tc) => {
-    await fetch('/api/registry/cases/' + tc.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_active: tc.is_active ? 0 : 1 }) });
-    fetchCases(tc.suite_id);
-  };
-
-  const triggerTestCase = async (tc, suiteName) => {
-    setRunModal(null);
+  const runTest = async (tc) => {
+    setConfirm(null);
     await fetch('/api/trigger', {
-      method:  'POST',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ suite: 'login', region, testCase: tc.name }),
+      body: JSON.stringify({ suite: region, region, testCase: tc.name }),
     });
-    navigate('/');
+    navigate('/live');
   };
 
-  if (loading) return <div className="flex justify-center py-24"><RefreshCw className="w-8 h-8 text-blue-500 animate-spin" /></div>;
+  const runAll = async () => {
+    setRunAllConfirm(false);
+    await fetch('/api/trigger', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ suite: 'all', region, testCase: 'all' }),
+    });
+    navigate('/live');
+  };
+
+  const totalCases = suites.reduce((a, s) => a + (s.case_count || 0), 0);
+
+  if (loading) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
+      <div style={{ width: 24, height: 24, borderRadius: '50%', border: '3px solid #e2e8f0', borderTopColor: '#3b82f6' }} className="spin" />
+    </div>
+  );
 
   return (
-    <div className="space-y-5">
+    <>
+      <TopBar
+        title={`${meta.flag} ${meta.name} Registry`}
+        subtitle={`${suites.length} suites · ${totalCases} cases`}
+        actions={
+          <>
+            <OutlineBtn onClick={fetchSuites}><ListChecks size={12} /> Refresh</OutlineBtn>
+            <PrimaryBtn onClick={() => setRunAllConfirm(true)}>
+              <ListChecks size={12} /> Run All
+            </PrimaryBtn>
+          </>
+        }
+      />
 
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <button onClick={() => navigate('/registry')} className="p-2 rounded-xl hover:bg-slate-100 transition-colors text-slate-500">
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-slate-800">{meta.flag} {meta.label}</h1>
-            <RegionBadge region={region} label={meta.label} />
-          </div>
-          <p className="text-slate-400 text-sm mt-0.5">{suites.length} suites &middot; {suites.reduce((s, x) => s + x.case_count, 0)} test cases</p>
+      <div style={{ padding: 24 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {suites.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '48px 24px', color: '#94a3b8', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12 }}>
+              <FlaskConical size={28} style={{ opacity: 0.3, margin: '0 auto 12px', display: 'block' }} />
+              <div style={{ fontSize: 13, marginBottom: 4 }}>No test suites yet</div>
+              <div style={{ fontSize: 11 }}>Add suites via the API or seed the database</div>
+            </div>
+          ) : (
+            suites.map(suite => (
+              <SuiteCard key={suite.id} suite={suite} onRun={setConfirm} />
+            ))
+          )}
         </div>
-        <button
-          onClick={() => setSuiteModal('add')}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-sm"
-        >
-          <Plus className="w-4 h-4" /> Add Suite
-        </button>
       </div>
 
-      {/* Suite list */}
-      {suites.length === 0 ? (
-        <div className="bg-white rounded-2xl p-16 text-center border border-slate-100 text-slate-400">
-          <FlaskConical className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          No suites yet — click Add Suite to create one
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {suites.map(suite => {
-            const open     = !!expanded[suite.id];
-            const suiteCases = cases[suite.id] || [];
-
-            return (
-              <div key={suite.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-
-                {/* Suite header */}
-                <div className="flex items-center gap-3 px-5 py-4 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => toggleExpand(suite.id)}>
-                  {open
-                    ? <ChevronDown className="w-5 h-5 text-slate-400 shrink-0" />
-                    : <ChevronRight className="w-5 h-5 text-slate-400 shrink-0" />}
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-slate-800">{suite.name}</div>
-                    {suite.description && <div className="text-xs text-slate-400 mt-0.5 truncate">{suite.description}</div>}
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className="text-xs text-slate-400">{suite.case_count} cases</span>
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${suite.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
-                      {suite.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                    <button onClick={e => { e.stopPropagation(); setSuiteModal(suite); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600">
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={e => { e.stopPropagation(); setConfirmDel({ type: 'suite', id: suite.id, label: suite.name, suiteId: suite.id }); }} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Test cases */}
-                {open && (
-                  <div className="border-t border-slate-50">
-                    {suiteCases.length === 0 ? (
-                      <div className="px-5 py-6 text-sm text-slate-400 text-center">No test cases yet</div>
-                    ) : (
-                      <div className="divide-y divide-slate-50">
-                        {suiteCases.map(tc => (
-                          <div key={tc.id} className={`flex items-center gap-3 px-5 py-3 transition-colors ${tc.is_active ? '' : 'opacity-50'}`}>
-                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${PRIORITY_STYLES[tc.priority] || PRIORITY_STYLES.medium}`}>
-                              {tc.priority}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm font-medium text-slate-800">{tc.name}</div>
-                              {tc.description && <div className="text-xs text-slate-400 mt-0.5 truncate">{tc.description}</div>}
-                            </div>
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <button
-                                onClick={() => setRunModal({ tc, suiteName: suite.name })}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-700 text-xs font-semibold transition-colors"
-                                title="Run this test"
-                              >
-                                <Play className="w-3 h-3" /> Run
-                              </button>
-                              <button onClick={() => navigate('/registry/cases/' + tc.id)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600" title="View">
-                                <Eye className="w-3.5 h-3.5" />
-                              </button>
-                              <button onClick={() => setCaseModal({ suiteId: suite.id, tc })} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600" title="Edit">
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                              <button onClick={() => toggleCase(tc)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-500" title={tc.is_active ? 'Deactivate' : 'Activate'}>
-                                {tc.is_active ? <ToggleRight className="w-4 h-4 text-emerald-500" /> : <ToggleLeft className="w-4 h-4" />}
-                              </button>
-                              <button onClick={() => setConfirmDel({ type: 'case', id: tc.id, label: tc.name, suiteId: suite.id })} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500" title="Delete">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <div className="px-5 py-3 border-t border-slate-50">
-                      <button
-                        onClick={() => setCaseModal({ suiteId: suite.id })}
-                        className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 font-medium"
-                      >
-                        <Plus className="w-4 h-4" /> Add Test Case
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Suite modal */}
-      {suiteModal && (
-        <SuiteModal
-          suite={suiteModal === 'add' ? null : suiteModal}
-          onClose={() => setSuiteModal(null)}
-          onSave={saveSuite}
-        />
-      )}
-
-      {/* Case modal */}
-      {caseModal && (
-        <CaseModal
-          tc={caseModal.tc || null}
-          onClose={() => setCaseModal(null)}
-          onSave={saveCase}
-        />
-      )}
-
-      {/* Run test case confirmation */}
-      {runModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
-            <div className="font-bold text-slate-800 mb-4">Run Test Case</div>
-            <div className="space-y-2 mb-5 text-sm">
-              <div className="flex gap-2">
-                <span className="text-slate-400 w-16 shrink-0">Test</span>
-                <span className="font-semibold text-slate-800">{runModal.tc.name}</span>
-              </div>
-              <div className="flex gap-2">
-                <span className="text-slate-400 w-16 shrink-0">Suite</span>
-                <span className="text-slate-600">{runModal.suiteName}</span>
-              </div>
-              <div className="flex gap-2">
-                <span className="text-slate-400 w-16 shrink-0">Region</span>
-                <span className="text-slate-600">{meta.flag} {meta.label}</span>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => setRunModal(null)} className="flex-1 px-4 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50">
-                Cancel
-              </button>
-              <button
-                onClick={() => triggerTestCase(runModal.tc, runModal.suiteName)}
-                className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
-              >
-                <Play className="w-4 h-4" /> Run Now
-              </button>
-            </div>
+      {/* Run All confirm */}
+      {runAllConfirm && (
+        <Modal title="Run All Test Cases" onClose={() => setRunAllConfirm(false)}>
+          <p style={{ fontSize: 13, color: '#475569', marginBottom: 20 }}>
+            Runs Login then {meta.name} E2E in sequence. You'll be redirected to Live Run.
+          </p>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <OutlineBtn onClick={() => setRunAllConfirm(false)}>Cancel</OutlineBtn>
+            <PrimaryBtn onClick={runAll}><ListChecks size={12} /> Run All</PrimaryBtn>
           </div>
-        </div>
+        </Modal>
       )}
 
-      {/* Delete confirmation */}
-      {confirmDel && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
-            <div className="font-bold text-slate-800 mb-2">Delete {confirmDel.type === 'suite' ? 'Suite' : 'Test Case'}?</div>
-            <p className="text-sm text-slate-500 mb-5">
-              <strong className="text-slate-700">{confirmDel.label}</strong> will be permanently deleted.
-              {confirmDel.type === 'suite' && ' All test cases inside will also be deleted.'}
-            </p>
-            <div className="flex gap-3">
-              <button onClick={() => setConfirmDel(null)} className="flex-1 px-4 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
-              <button
-                onClick={() => confirmDel.type === 'suite' ? deleteSuite(confirmDel.id) : deleteCase(confirmDel.id, confirmDel.suiteId)}
-                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold"
-              >
-                Delete
-              </button>
-            </div>
+      {/* Confirm single test */}
+      {confirm && (
+        <Modal title="Run Test Case" onClose={() => setConfirm(null)}>
+          <p style={{ fontSize: 13, color: '#475569', marginBottom: 20 }}>{confirm.name}</p>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <OutlineBtn onClick={() => setConfirm(null)}>Cancel</OutlineBtn>
+            <PrimaryBtn onClick={() => runTest(confirm)}><Play size={12} /> Run Now</PrimaryBtn>
           </div>
-        </div>
+        </Modal>
       )}
+    </>
+  );
+}
 
+function Modal({ title, onClose, children }) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16,
+    }}>
+      <div style={{ background: '#ffffff', borderRadius: 14, padding: 24, width: '100%', maxWidth: 380, boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{title}</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={16} /></button>
+        </div>
+        {children}
+      </div>
     </div>
   );
 }
