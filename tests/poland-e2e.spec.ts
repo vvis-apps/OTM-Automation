@@ -122,7 +122,7 @@ test.describe('Poland - Kraft Heinz OTM Integration', () => {
       emitStep({ step: num, name: label, status: 'running' });
       const t0 = Date.now();
       try {
-        await allure.step(label, fn);
+        await fn();
         const ss = await takeStepScreenshot(page, label);
         const durationMs = Date.now() - t0;
         if (ss) lastScreenshot = ss;

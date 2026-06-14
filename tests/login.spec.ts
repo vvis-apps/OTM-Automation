@@ -139,7 +139,7 @@ test.describe('OTM Login', () => {
       const t0 = Date.now();
       let ss: string | null = null;
       try {
-        await allure.step(label, fn);
+        await fn();
         ss = await takeStepScreenshot(page, label);
         const durationMs = Date.now() - t0;
         emitStep({ step: num, name: label, status: 'pass', durationMs, screenshot: ss });
