@@ -1,21 +1,20 @@
 'use strict';
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
-// On Render (or any cloud env), install Playwright browsers at startup
-// so they're available in the runtime container (build cache ≠ runtime)
+// On Render, install Playwright browsers async so port binds immediately
 if (process.env.RENDER) {
-  const { execSync } = require('child_process');
-  try {
-    console.log('[playwright] Installing Chromium browser...');
-    execSync('npx playwright install chromium', {
-      env:   { ...process.env, PLAYWRIGHT_BROWSERS_PATH: '0' },
-      stdio: 'inherit',
-      cwd:   require('path').join(__dirname, '..'),
-    });
-    console.log('[playwright] Chromium ready.');
-  } catch (e) {
-    console.error('[playwright] Install failed:', e.message);
-  }
+  const { exec }   = require('child_process');
+  const pwState    = require('./pw-state');
+  const ROOT_DIR   = require('path').join(__dirname, '..');
+  console.log('[playwright] Installing Chromium in background...');
+  exec('npx playwright install chromium chromium-headless-shell',
+    { env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: '0' }, cwd: ROOT_DIR },
+    (err) => {
+      if (err) console.error('[playwright] Install error:', err.message);
+      else     console.log('[playwright] Chromium ready ✓');
+      pwState.setReady();
+    }
+  );
 }
 
 const http = require('http');

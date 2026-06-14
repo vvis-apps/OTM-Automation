@@ -2,6 +2,7 @@
 const { exec }  = require('child_process');
 const path      = require('path');
 const { createRun, updateRun, getTestsByRunId } = require('../db');
+const pwState = require('../pw-state');
 
 const ROOT = path.join(__dirname, '..', '..');
 
@@ -145,25 +146,30 @@ function handleTrigger(req, res, upath) {
 
       const generateReport = () => runCmd('npm run report', baseEnv, 0).catch(() => {});
 
-      if (suite === 'all') {
-        runCmd('npm run test:login', { ...baseEnv, OTM_TEST_CASE: 'login' }, 0)
-          .then(loginCode => {
-            const divider = { type: 'step', step: 11, total: 11, name: '── Poland OTM E2E Starting ──', status: 'pass', duration_ms: 0 };
-            live.steps.push(divider);
-            broadcastEvent('step', divider);
-            return runCmd('npm run test:poland', { ...baseEnv, OTM_TEST_CASE: 'poland-e2e' }, 100)
-              .then(polandCode => generateReport().then(() => finish(loginCode === 0 && polandCode === 0 ? 0 : 1)));
-          })
-          .catch(err => { broadcastEvent('error', { message: err.message }); finish(1); });
-      } else {
-        const tcLower = testCase.toLowerCase();
-        const cmd = tcLower.includes('login') ? 'npm run test:login' : 'npm run test:poland';
-        runCmd(cmd, baseEnv, 0)
-          .then(code => generateReport().then(() => finish(code)))
-          .catch(err => { broadcastEvent('error', { message: err.message }); finish(1); });
-      }
+      const runTests = () => {
+        if (suite === 'all') {
+          runCmd('npm run test:login', { ...baseEnv, OTM_TEST_CASE: 'login' }, 0)
+            .then(loginCode => {
+              const divider = { type: 'step', step: 11, total: 11, name: '── Poland OTM E2E Starting ──', status: 'pass', duration_ms: 0 };
+              live.steps.push(divider);
+              broadcastEvent('step', divider);
+              return runCmd('npm run test:poland', { ...baseEnv, OTM_TEST_CASE: 'poland-e2e' }, 100)
+                .then(polandCode => generateReport().then(() => finish(loginCode === 0 && polandCode === 0 ? 0 : 1)));
+            })
+            .catch(err => { broadcastEvent('error', { message: err.message }); finish(1); });
+        } else {
+          const tcLower = testCase.toLowerCase();
+          const cmd = tcLower.includes('login') ? 'npm run test:login' : 'npm run test:poland';
+          runCmd(cmd, baseEnv, 0)
+            .then(code => generateReport().then(() => finish(code)))
+            .catch(err => { broadcastEvent('error', { message: err.message }); finish(1); });
+        }
+      };
 
       json(res, { runId, status: 'started' });
+
+      // Wait for Playwright browser to be ready before running (Render installs async)
+      pwState.promise.then(runTests);
     });
     return true;
   }
