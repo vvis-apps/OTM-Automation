@@ -15,13 +15,21 @@ const OTM_REGION      = process.env.OTM_REGION       ?? 'north-america';
 const OTM_REGION_LABEL = process.env.OTM_REGION_LABEL ?? 'North America';
 const OTM_TEST_CASE   = process.env.OTM_TEST_CASE    ?? '';
 
-// Oracle IDCS (OCI) login selectors — from Selenium LoginPage.ts
+// Oracle login selectors — IDCS, OCI Console, OAM variants
 const SEL_OCI_USERNAME = '#idcs-signin-basic-signin-form-username';
 const SEL_OCI_PASSWORD = '#idcs-signin-basic-signin-form-password input';
 const SEL_OCI_SIGNIN   = '#idcs-signin-basic-signin-form-submit';
 const SEL_OPC_USERNAME = '#username';
 const SEL_OPC_PASSWORD = '#password';
 const SEL_OPC_SIGNIN   = '#signin';
+const SEL_OAM_USERNAME = '#userid';
+const SEL_OAM_PASSWORD = '#pass';
+const SEL_OAM_SIGNIN   = '#submit, input[type="submit"], button[type="submit"]';
+// Combined selector that matches ANY Oracle login username field
+const SEL_ANY_USERNAME =
+  '#idcs-signin-basic-signin-form-username, #username, #userid, ' +
+  'input[name="username"], input[name="userid"], input[autocomplete="username"], ' +
+  'input[type="text"]:not([hidden])';
 const SEL_HOME_LINK    = 'text=Shipment Management';
 
 const TOTAL_STEPS = 10;
@@ -160,18 +168,22 @@ test.describe('OTM Login', () => {
       let signSel = SEL_OCI_SIGNIN;
 
       await step(2, 'Login page loaded', async () => {
-        await page.waitForFunction(
-          () => !!document.querySelector('#idcs-signin-basic-signin-form-username') ||
-                !!document.querySelector('#username'),
-          { timeout: 60000 }
-        );
+        // Wait for ANY Oracle login username input (covers IDCS, OCI Console, OAM)
+        await page.waitForSelector(SEL_ANY_USERNAME, { state: 'visible', timeout: 90_000 });
         const title = await page.title();
         await allure.parameter('Login page title', title);
-        if (title.toLowerCase().includes('oracle cloud')) {
+        // Detect which login variant is present
+        if (await page.locator(SEL_OAM_USERNAME).count() > 0) {
+          userSel = SEL_OAM_USERNAME;
+          passSel = SEL_OAM_PASSWORD;
+          signSel = SEL_OAM_SIGNIN;
+        } else if (await page.locator(SEL_OPC_USERNAME).count() > 0) {
           userSel = SEL_OPC_USERNAME;
           passSel = SEL_OPC_PASSWORD;
           signSel = SEL_OPC_SIGNIN;
         }
+        // default: SEL_OCI_USERNAME (IDCS)
+        await allure.parameter('Login variant', userSel);
       });
 
       // Step 3

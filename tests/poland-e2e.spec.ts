@@ -151,16 +151,20 @@ test.describe('Poland - Kraft Heinz OTM Integration', () => {
         await page.goto(OTM_URL, { waitUntil: 'domcontentloaded' });
       });
 
+      const SEL_ANY_USER =
+        '#idcs-signin-basic-signin-form-username, #username, #userid, ' +
+        'input[name="username"], input[name="userid"], input[autocomplete="username"], ' +
+        'input[type="text"]:not([hidden])';
+
+      let loginUserSel = '#idcs-signin-basic-signin-form-username, #username, #userid';
+      let loginSubmitSel = '#idcs-signin-basic-signin-form-submit, #signin, #submit, input[type="submit"], button[type="submit"]';
+
       await step(2, 'Login page loaded', async () => {
-        await page.waitForFunction(
-          () => !!document.querySelector('#idcs-signin-basic-signin-form-username') ||
-                !!document.querySelector('#username'),
-          { timeout: 60_000 }
-        );
+        await page.waitForSelector(SEL_ANY_USER, { state: 'visible', timeout: 90_000 });
       });
 
       await step(3, 'Enter username', async () => {
-        const field = page.locator('#idcs-signin-basic-signin-form-username, #username').first();
+        const field = page.locator(loginUserSel).first();
         await field.waitFor({ state: 'visible', timeout: 15_000 });
         await field.fill(UI_USER);
       });
@@ -172,7 +176,7 @@ test.describe('Poland - Kraft Heinz OTM Integration', () => {
       });
 
       await step(5, 'Click Sign In', async () => {
-        await page.locator('#idcs-signin-basic-signin-form-submit, #signin').first().click();
+        await page.locator(loginSubmitSel).first().click();
       });
 
       await step(6, 'Wait for OTM homepage to load', async () => {
