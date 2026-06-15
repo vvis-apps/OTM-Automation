@@ -29,7 +29,7 @@ function json(res, data, status) {
 // ── Run a single playwright command, streaming steps ─────────────────────
 function runCmd(cmd, env, stepOffset) {
   return new Promise((resolve, reject) => {
-    const child = exec(cmd, { cwd: ROOT, maxBuffer: 20 * 1024 * 1024, env });
+    const child = exec(cmd, { cwd: ROOT, maxBuffer: 20 * 1024 * 1024, env, windowsHide: false });
 
     child.on('error', reject);
 
