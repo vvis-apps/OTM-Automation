@@ -102,7 +102,7 @@ async function captureScreenshot(page: any, filename: string): Promise<string> {
 test.describe('Poland - Kraft Heinz OTM Integration', () => {
 
   test('Poland OTM E2E - SAP order integration with delivery note', async ({ page }) => {
-    test.setTimeout(300_000);
+    test.setTimeout(900_000); // 15 min — 43 steps can take 8-9 min locally
 
     await allure.epic('OTM Integration');
     await allure.feature('Poland SAP Order Flow');
