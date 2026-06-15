@@ -145,7 +145,12 @@ function handleTrigger(req, res, upath) {
         broadcastEvent('done', { status, runId, durationMs });
       };
 
-      const generateReport = () => runCmd('npm run report', baseEnv, 0).catch(() => {});
+      const generateReport = () => {
+        // Allure report requires Java — skip silently if not available
+        return runCmd('npm run report', baseEnv, 0).catch(() => {
+          console.log('[allure] Skipped — Java not installed');
+        });
+      };
 
       const PW = 'npx playwright test';
       const runTests = () => {
