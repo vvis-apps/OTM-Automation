@@ -119,7 +119,8 @@ function handleTrigger(req, res, upath) {
         ...process.env,
         OTM_RUN_ID:               String(runId),
         OTM_TEST_CASE:            testCase,
-        HEADLESS:                 '1',
+        // Only force headless on Render; locally show the browser
+        ...(process.env.RENDER ? { HEADLESS: '1' } : {}),
         PLAYWRIGHT_BROWSERS_PATH: '0',
       };
 
